@@ -1,0 +1,440 @@
+# Custom Packly OS: editable Mermaid diagrams
+
+Reference design v1, 19 September 2026. Selected columns keep ER diagrams readable; the data-model document defines the full constraints.
+
+## Invoice, payment and job creation
+
+Payment, allocation, journal, unique job and task requests commit in one database transaction. The generated receipt is a later task. No payment means no job; full credit is not funding.
+
+<!-- mermaid:id=invoice_to_job -->
+```mermaid
+flowchart TB
+  Draft["Draft invoice"]
+  Issued["Issue and send"]
+  Await["Await verified funds"]
+  Outstanding["Outstanding or overdue"]
+  Receive["Prepare receipt, allocation and journal"]
+  Eligible["Full funding and eligible deliverables"]
+  Job["Create one job"]
+  Commit["Commit all records"]
+  Receipt["Generate receipt"]
+  Review["Check artwork and specification"]
+  Production["Release production"]
+  Cancel["Credit or cancel"]
+  Draft --> Issued
+  Issued --> Await
+  Await -->|No receipt| Outstanding
+  Outstanding -->|Continue collection| Await
+  Outstanding -->|Abandon| Cancel
+  Await -->|Funds verified| Receive
+  Receive -->|Evaluate| Eligible
+  Eligible -->|No new job| Commit
+  Eligible -->|Yes| Job
+  Job --> Commit
+  Commit -->|Every receipt| Receipt
+  Commit -->|Balance still due| Await
+  Commit -->|Job exists| Review
+  Review -->|Approved| Production
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImRpcmVjdGlvbiI6IlRCIiwiZWRnZXMiOlt7ImZyb20iOiJEcmFmdCIsInRvIjoiSXNzdWVkIn0seyJmcm9tIjoiSXNzdWVkIiwidG8iOiJBd2FpdCJ9LHsiZnJvbSI6IkF3YWl0IiwibGFiZWwiOiJObyByZWNlaXB0IiwidG8iOiJPdXRzdGFuZGluZyJ9LHsiZnJvbSI6Ik91dHN0YW5kaW5nIiwibGFiZWwiOiJDb250aW51ZSBjb2xsZWN0aW9uIiwidG8iOiJBd2FpdCJ9LHsiZnJvbSI6Ik91dHN0YW5kaW5nIiwibGFiZWwiOiJBYmFuZG9uIiwidG8iOiJDYW5jZWwifSx7ImZyb20iOiJBd2FpdCIsImxhYmVsIjoiRnVuZHMgdmVyaWZpZWQiLCJ0byI6IlJlY2VpdmUifSx7ImZyb20iOiJSZWNlaXZlIiwibGFiZWwiOiJFdmFsdWF0ZSIsInRvIjoiRWxpZ2libGUifSx7ImZyb20iOiJFbGlnaWJsZSIsImxhYmVsIjoiTm8gbmV3IGpvYiIsInRvIjoiQ29tbWl0In0seyJmcm9tIjoiRWxpZ2libGUiLCJsYWJlbCI6IlllcyIsInRvIjoiSm9iIn0seyJmcm9tIjoiSm9iIiwidG8iOiJDb21taXQifSx7ImZyb20iOiJDb21taXQiLCJsYWJlbCI6IkV2ZXJ5IHJlY2VpcHQiLCJ0byI6IlJlY2VpcHQifSx7ImZyb20iOiJDb21taXQiLCJsYWJlbCI6IkJhbGFuY2Ugc3RpbGwgZHVlIiwidG8iOiJBd2FpdCJ9LHsiZnJvbSI6IkNvbW1pdCIsImxhYmVsIjoiSm9iIGV4aXN0cyIsInRvIjoiUmV2aWV3In0seyJmcm9tIjoiUmV2aWV3IiwibGFiZWwiOiJBcHByb3ZlZCIsInRvIjoiUHJvZHVjdGlvbiJ9XSwibm9kZXMiOlt7ImlkIjoiRHJhZnQiLCJsYWJlbCI6IkRyYWZ0IGludm9pY2UifSx7ImlkIjoiSXNzdWVkIiwibGFiZWwiOiJJc3N1ZSBhbmQgc2VuZCJ9LHsiaWQiOiJBd2FpdCIsImxhYmVsIjoiQXdhaXQgdmVyaWZpZWQgZnVuZHMifSx7ImlkIjoiT3V0c3RhbmRpbmciLCJsYWJlbCI6Ik91dHN0YW5kaW5nIG9yIG92ZXJkdWUifSx7ImlkIjoiUmVjZWl2ZSIsImxhYmVsIjoiUHJlcGFyZSByZWNlaXB0LCBhbGxvY2F0aW9uIGFuZCBqb3VybmFsIn0seyJpZCI6IkVsaWdpYmxlIiwibGFiZWwiOiJGdWxsIGZ1bmRpbmcgYW5kIGVsaWdpYmxlIGRlbGl2ZXJhYmxlcyJ9LHsiaWQiOiJKb2IiLCJsYWJlbCI6IkNyZWF0ZSBvbmUgam9iIn0seyJpZCI6IkNvbW1pdCIsImxhYmVsIjoiQ29tbWl0IGFsbCByZWNvcmRzIn0seyJpZCI6IlJlY2VpcHQiLCJsYWJlbCI6IkdlbmVyYXRlIHJlY2VpcHQifSx7ImlkIjoiUmV2aWV3IiwibGFiZWwiOiJDaGVjayBhcnR3b3JrIGFuZCBzcGVjaWZpY2F0aW9uIn0seyJpZCI6IlByb2R1Y3Rpb24iLCJsYWJlbCI6IlJlbGVhc2UgcHJvZHVjdGlvbiJ9LHsiaWQiOiJDYW5jZWwiLCJsYWJlbCI6IkNyZWRpdCBvciBjYW5jZWwifV19LCJkZXNjcmlwdGlvbiI6IlBheW1lbnQsIGFsbG9jYXRpb24sIGpvdXJuYWwsIHVuaXF1ZSBqb2IgYW5kIHRhc2sgcmVxdWVzdHMgY29tbWl0IGluIG9uZSBkYXRhYmFzZSB0cmFuc2FjdGlvbi4gVGhlIGdlbmVyYXRlZCByZWNlaXB0IGlzIGEgbGF0ZXIgdGFzay4gTm8gcGF5bWVudCBtZWFucyBubyBqb2I7IGZ1bGwgY3JlZGl0IGlzIG5vdCBmdW5kaW5nLiIsImlkIjoiaW52b2ljZV90b19qb2IiLCJraW5kIjoiZmxvd2NoYXJ0Iiwic291cmNlU2hhMjU2IjoiOTAzMmY4NzAzZTVlOGE2MzQ2NmQ2YzI0MDllNmZiNzU3Y2UzZTFlNWEwMmI1ZGFjYWI2ODQwODEwNjM1NWFiZCIsInN0eWxlcyI6W10sInRpdGxlIjoiSW52b2ljZSwgcGF5bWVudCBhbmQgam9iIGNyZWF0aW9uIiwidmVyc2lvbiI6MX0
+```
+
+## Supplier estimates, bills and payments
+
+Estimates are planning data. Supplier bills and incurred-cost accruals establish actual cost/asset and obligations under the approved policy. Payments settle or create advances.
+
+<!-- mermaid:id=supplier_cost_flow -->
+```mermaid
+flowchart TB
+  Job["Funded job"]
+  Estimate["Estimate production or shipping cost"]
+  Work["Receive supplier work"]
+  Bill["Receive supplier bill"]
+  Accrue["Record incurred cost accrual"]
+  Post["Post cost or eligible asset and payable"]
+  Pay["Record outgoing payment"]
+  Balance["Reduce payable and cash"]
+  Forecast["Update forecast margin"]
+  Actual["Update actual cost and liability"]
+  Job -->|Plan| Estimate
+  Estimate -->|No financial posting| Forecast
+  Job -->|Fulfil| Work
+  Work -->|Bill available| Bill
+  Work -->|Bill missing at close| Accrue
+  Bill -->|Validate| Post
+  Accrue -->|Clear on bill arrival| Post
+  Post --> Actual
+  Post -->|When paid| Pay
+  Pay -->|No second cost| Balance
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImRpcmVjdGlvbiI6IlRCIiwiZWRnZXMiOlt7ImZyb20iOiJKb2IiLCJsYWJlbCI6IlBsYW4iLCJ0byI6IkVzdGltYXRlIn0seyJmcm9tIjoiRXN0aW1hdGUiLCJsYWJlbCI6Ik5vIGZpbmFuY2lhbCBwb3N0aW5nIiwidG8iOiJGb3JlY2FzdCJ9LHsiZnJvbSI6IkpvYiIsImxhYmVsIjoiRnVsZmlsIiwidG8iOiJXb3JrIn0seyJmcm9tIjoiV29yayIsImxhYmVsIjoiQmlsbCBhdmFpbGFibGUiLCJ0byI6IkJpbGwifSx7ImZyb20iOiJXb3JrIiwibGFiZWwiOiJCaWxsIG1pc3NpbmcgYXQgY2xvc2UiLCJ0byI6IkFjY3J1ZSJ9LHsiZnJvbSI6IkJpbGwiLCJsYWJlbCI6IlZhbGlkYXRlIiwidG8iOiJQb3N0In0seyJmcm9tIjoiQWNjcnVlIiwibGFiZWwiOiJDbGVhciBvbiBiaWxsIGFycml2YWwiLCJ0byI6IlBvc3QifSx7ImZyb20iOiJQb3N0IiwidG8iOiJBY3R1YWwifSx7ImZyb20iOiJQb3N0IiwibGFiZWwiOiJXaGVuIHBhaWQiLCJ0byI6IlBheSJ9LHsiZnJvbSI6IlBheSIsImxhYmVsIjoiTm8gc2Vjb25kIGNvc3QiLCJ0byI6IkJhbGFuY2UifV0sIm5vZGVzIjpbeyJpZCI6IkpvYiIsImxhYmVsIjoiRnVuZGVkIGpvYiJ9LHsiaWQiOiJFc3RpbWF0ZSIsImxhYmVsIjoiRXN0aW1hdGUgcHJvZHVjdGlvbiBvciBzaGlwcGluZyBjb3N0In0seyJpZCI6IldvcmsiLCJsYWJlbCI6IlJlY2VpdmUgc3VwcGxpZXIgd29yayJ9LHsiaWQiOiJCaWxsIiwibGFiZWwiOiJSZWNlaXZlIHN1cHBsaWVyIGJpbGwifSx7ImlkIjoiQWNjcnVlIiwibGFiZWwiOiJSZWNvcmQgaW5jdXJyZWQgY29zdCBhY2NydWFsIn0seyJpZCI6IlBvc3QiLCJsYWJlbCI6IlBvc3QgY29zdCBvciBlbGlnaWJsZSBhc3NldCBhbmQgcGF5YWJsZSJ9LHsiaWQiOiJQYXkiLCJsYWJlbCI6IlJlY29yZCBvdXRnb2luZyBwYXltZW50In0seyJpZCI6IkJhbGFuY2UiLCJsYWJlbCI6IlJlZHVjZSBwYXlhYmxlIGFuZCBjYXNoIn0seyJpZCI6IkZvcmVjYXN0IiwibGFiZWwiOiJVcGRhdGUgZm9yZWNhc3QgbWFyZ2luIn0seyJpZCI6IkFjdHVhbCIsImxhYmVsIjoiVXBkYXRlIGFjdHVhbCBjb3N0IGFuZCBsaWFiaWxpdHkifV19LCJkZXNjcmlwdGlvbiI6IkVzdGltYXRlcyBhcmUgcGxhbm5pbmcgZGF0YS4gU3VwcGxpZXIgYmlsbHMgYW5kIGluY3VycmVkLWNvc3QgYWNjcnVhbHMgZXN0YWJsaXNoIGFjdHVhbCBjb3N0L2Fzc2V0IGFuZCBvYmxpZ2F0aW9ucyB1bmRlciB0aGUgYXBwcm92ZWQgcG9saWN5LiBQYXltZW50cyBzZXR0bGUgb3IgY3JlYXRlIGFkdmFuY2VzLiIsImlkIjoic3VwcGxpZXJfY29zdF9mbG93Iiwia2luZCI6ImZsb3djaGFydCIsInNvdXJjZVNoYTI1NiI6ImVkMzM2MDIyNmU3ZmFmODc0YWIxYzdjMzIwNGU5YTAxMjRlYTVkOGNmNTdjYTk1ZjJkYjNlZjgyMDU1NjBlZDUiLCJzdHlsZXMiOltdLCJ0aXRsZSI6IlN1cHBsaWVyIGVzdGltYXRlcywgYmlsbHMgYW5kIHBheW1lbnRzIiwidmVyc2lvbiI6MX0
+```
+
+## Application and infrastructure
+
+Domain modules share one application and database. Outbox tasks are database rows, not a separate messaging service. External integrations are optional after the manual pilot.
+
+<!-- mermaid:id=application_architecture -->
+```mermaid
+flowchart TB
+  Browser["Momin and Zohaib"]
+  Next["Next.js on Vercel"]
+  Auth["Neon managed authentication"]
+  Guard["Session and entity authorization"]
+  Commands["Validated domain commands"]
+  Queries["Report and detail queries"]
+  Postgres["Neon PostgreSQL via Drizzle"]
+  Outbox["Durable task records"]
+  Worker["Scheduled task worker"]
+  Storage["Private Neon object storage"]
+  Providers["Email or payment providers"]
+  Browser -->|HTTPS| Next
+  Next -->|Verify session| Auth
+  Next -->|Server boundary| Guard
+  Guard -->|Writes| Commands
+  Guard -->|Reads| Queries
+  Commands -->|Atomic transactions| Postgres
+  Queries -->|Scoped queries| Postgres
+  Commands -->|Inside same transaction| Outbox
+  Outbox -->|Stored in database| Postgres
+  Worker -->|Claim and retry| Outbox
+  Worker -->|Versioned documents| Storage
+  Worker -->|Optional integrations| Providers
+  Guard -->|Authorize short-lived downloads| Storage
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImRpcmVjdGlvbiI6IlRCIiwiZWRnZXMiOlt7ImZyb20iOiJCcm93c2VyIiwibGFiZWwiOiJIVFRQUyIsInRvIjoiTmV4dCJ9LHsiZnJvbSI6Ik5leHQiLCJsYWJlbCI6IlZlcmlmeSBzZXNzaW9uIiwidG8iOiJBdXRoIn0seyJmcm9tIjoiTmV4dCIsImxhYmVsIjoiU2VydmVyIGJvdW5kYXJ5IiwidG8iOiJHdWFyZCJ9LHsiZnJvbSI6Ikd1YXJkIiwibGFiZWwiOiJXcml0ZXMiLCJ0byI6IkNvbW1hbmRzIn0seyJmcm9tIjoiR3VhcmQiLCJsYWJlbCI6IlJlYWRzIiwidG8iOiJRdWVyaWVzIn0seyJmcm9tIjoiQ29tbWFuZHMiLCJsYWJlbCI6IkF0b21pYyB0cmFuc2FjdGlvbnMiLCJ0byI6IlBvc3RncmVzIn0seyJmcm9tIjoiUXVlcmllcyIsImxhYmVsIjoiU2NvcGVkIHF1ZXJpZXMiLCJ0byI6IlBvc3RncmVzIn0seyJmcm9tIjoiQ29tbWFuZHMiLCJsYWJlbCI6Ikluc2lkZSBzYW1lIHRyYW5zYWN0aW9uIiwidG8iOiJPdXRib3gifSx7ImZyb20iOiJPdXRib3giLCJsYWJlbCI6IlN0b3JlZCBpbiBkYXRhYmFzZSIsInRvIjoiUG9zdGdyZXMifSx7ImZyb20iOiJXb3JrZXIiLCJsYWJlbCI6IkNsYWltIGFuZCByZXRyeSIsInRvIjoiT3V0Ym94In0seyJmcm9tIjoiV29ya2VyIiwibGFiZWwiOiJWZXJzaW9uZWQgZG9jdW1lbnRzIiwidG8iOiJTdG9yYWdlIn0seyJmcm9tIjoiV29ya2VyIiwibGFiZWwiOiJPcHRpb25hbCBpbnRlZ3JhdGlvbnMiLCJ0byI6IlByb3ZpZGVycyJ9LHsiZnJvbSI6Ikd1YXJkIiwibGFiZWwiOiJBdXRob3JpemUgc2hvcnQtbGl2ZWQgZG93bmxvYWRzIiwidG8iOiJTdG9yYWdlIn1dLCJub2RlcyI6W3siaWQiOiJCcm93c2VyIiwibGFiZWwiOiJNb21pbiBhbmQgWm9oYWliIn0seyJpZCI6Ik5leHQiLCJsYWJlbCI6Ik5leHQuanMgb24gVmVyY2VsIn0seyJpZCI6IkF1dGgiLCJsYWJlbCI6Ik5lb24gbWFuYWdlZCBhdXRoZW50aWNhdGlvbiJ9LHsiaWQiOiJHdWFyZCIsImxhYmVsIjoiU2Vzc2lvbiBhbmQgZW50aXR5IGF1dGhvcml6YXRpb24ifSx7ImlkIjoiQ29tbWFuZHMiLCJsYWJlbCI6IlZhbGlkYXRlZCBkb21haW4gY29tbWFuZHMifSx7ImlkIjoiUXVlcmllcyIsImxhYmVsIjoiUmVwb3J0IGFuZCBkZXRhaWwgcXVlcmllcyJ9LHsiaWQiOiJQb3N0Z3JlcyIsImxhYmVsIjoiTmVvbiBQb3N0Z3JlU1FMIHZpYSBEcml6emxlIn0seyJpZCI6Ik91dGJveCIsImxhYmVsIjoiRHVyYWJsZSB0YXNrIHJlY29yZHMifSx7ImlkIjoiV29ya2VyIiwibGFiZWwiOiJTY2hlZHVsZWQgdGFzayB3b3JrZXIifSx7ImlkIjoiU3RvcmFnZSIsImxhYmVsIjoiUHJpdmF0ZSBOZW9uIG9iamVjdCBzdG9yYWdlIn0seyJpZCI6IlByb3ZpZGVycyIsImxhYmVsIjoiRW1haWwgb3IgcGF5bWVudCBwcm92aWRlcnMifV19LCJkZXNjcmlwdGlvbiI6IkRvbWFpbiBtb2R1bGVzIHNoYXJlIG9uZSBhcHBsaWNhdGlvbiBhbmQgZGF0YWJhc2UuIE91dGJveCB0YXNrcyBhcmUgZGF0YWJhc2Ugcm93cywgbm90IGEgc2VwYXJhdGUgbWVzc2FnaW5nIHNlcnZpY2UuIEV4dGVybmFsIGludGVncmF0aW9ucyBhcmUgb3B0aW9uYWwgYWZ0ZXIgdGhlIG1hbnVhbCBwaWxvdC4iLCJpZCI6ImFwcGxpY2F0aW9uX2FyY2hpdGVjdHVyZSIsImtpbmQiOiJmbG93Y2hhcnQiLCJzb3VyY2VTaGEyNTYiOiI1NWIzMGRjNTE1NzVhNzJiZDg0MjhhNzAwY2Y4ZDA1MmFiZTU2ZWI2YzkyYzcyYzFkZmE4NjAxMjMxMWQyZWZlIiwic3R5bGVzIjpbXSwidGl0bGUiOiJBcHBsaWNhdGlvbiBhbmQgaW5mcmFzdHJ1Y3R1cmUiLCJ2ZXJzaW9uIjoxfQ
+```
+
+## Atomic payment posting and document generation
+
+Failure before commit rolls back the transaction. A request retry returns the existing result. A file-generation failure retries independently and cannot duplicate the receipt posting.
+
+<!-- mermaid:id=record_payment_sequence -->
+```mermaid
+sequenceDiagram
+  actor Operator as Operator
+  participant App as Next.js command
+  participant DB as PostgreSQL
+  participant Worker as Task worker
+  participant Files as Private storage
+  Operator->>App: Record verified receipt with idempotency key
+  App->>App: Validate session, permissions and input
+  App->>DB: Begin transaction and claim request key
+  App->>DB: Lock invoice and affected funding records
+  DB-->>App: Current charges, credits and allocations
+  App->>DB: Insert payment, allocation and balanced journal
+  App->>DB: Create eligible job once&#59; enqueue receipt&#59; audit
+  App->>DB: Commit all business records
+  DB-->>App: Committed identifiers
+  App-->>Operator: Payment and job result
+  Worker->>DB: Claim committed PDF task with lease
+  DB-->>Worker: Immutable document snapshot
+  Worker->>Files: Write document to a new object key
+  Files-->>Worker: Object key and checksum
+  Worker->>DB: Store file metadata and finish task
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7Im1lc3NhZ2VzIjpbeyJmcm9tIjoiT3BlcmF0b3IiLCJraW5kIjoic3luYyIsInRleHQiOiJSZWNvcmQgdmVyaWZpZWQgcmVjZWlwdCB3aXRoIGlkZW1wb3RlbmN5IGtleSIsInRvIjoiQXBwIn0seyJmcm9tIjoiQXBwIiwia2luZCI6InN5bmMiLCJ0ZXh0IjoiVmFsaWRhdGUgc2Vzc2lvbiwgcGVybWlzc2lvbnMgYW5kIGlucHV0IiwidG8iOiJBcHAifSx7ImZyb20iOiJBcHAiLCJraW5kIjoic3luYyIsInRleHQiOiJCZWdpbiB0cmFuc2FjdGlvbiBhbmQgY2xhaW0gcmVxdWVzdCBrZXkiLCJ0byI6IkRCIn0seyJmcm9tIjoiQXBwIiwia2luZCI6InN5bmMiLCJ0ZXh0IjoiTG9jayBpbnZvaWNlIGFuZCBhZmZlY3RlZCBmdW5kaW5nIHJlY29yZHMiLCJ0byI6IkRCIn0seyJmcm9tIjoiREIiLCJraW5kIjoicmVwbHkiLCJ0ZXh0IjoiQ3VycmVudCBjaGFyZ2VzLCBjcmVkaXRzIGFuZCBhbGxvY2F0aW9ucyIsInRvIjoiQXBwIn0seyJmcm9tIjoiQXBwIiwia2luZCI6InN5bmMiLCJ0ZXh0IjoiSW5zZXJ0IHBheW1lbnQsIGFsbG9jYXRpb24gYW5kIGJhbGFuY2VkIGpvdXJuYWwiLCJ0byI6IkRCIn0seyJmcm9tIjoiQXBwIiwia2luZCI6InN5bmMiLCJ0ZXh0IjoiQ3JlYXRlIGVsaWdpYmxlIGpvYiBvbmNlOyBlbnF1ZXVlIHJlY2VpcHQ7IGF1ZGl0IiwidG8iOiJEQiJ9LHsiZnJvbSI6IkFwcCIsImtpbmQiOiJzeW5jIiwidGV4dCI6IkNvbW1pdCBhbGwgYnVzaW5lc3MgcmVjb3JkcyIsInRvIjoiREIifSx7ImZyb20iOiJEQiIsImtpbmQiOiJyZXBseSIsInRleHQiOiJDb21taXR0ZWQgaWRlbnRpZmllcnMiLCJ0byI6IkFwcCJ9LHsiZnJvbSI6IkFwcCIsImtpbmQiOiJyZXBseSIsInRleHQiOiJQYXltZW50IGFuZCBqb2IgcmVzdWx0IiwidG8iOiJPcGVyYXRvciJ9LHsiZnJvbSI6IldvcmtlciIsImtpbmQiOiJzeW5jIiwidGV4dCI6IkNsYWltIGNvbW1pdHRlZCBQREYgdGFzayB3aXRoIGxlYXNlIiwidG8iOiJEQiJ9LHsiZnJvbSI6IkRCIiwia2luZCI6InJlcGx5IiwidGV4dCI6IkltbXV0YWJsZSBkb2N1bWVudCBzbmFwc2hvdCIsInRvIjoiV29ya2VyIn0seyJmcm9tIjoiV29ya2VyIiwia2luZCI6InN5bmMiLCJ0ZXh0IjoiV3JpdGUgZG9jdW1lbnQgdG8gYSBuZXcgb2JqZWN0IGtleSIsInRvIjoiRmlsZXMifSx7ImZyb20iOiJGaWxlcyIsImtpbmQiOiJyZXBseSIsInRleHQiOiJPYmplY3Qga2V5IGFuZCBjaGVja3N1bSIsInRvIjoiV29ya2VyIn0seyJmcm9tIjoiV29ya2VyIiwia2luZCI6InN5bmMiLCJ0ZXh0IjoiU3RvcmUgZmlsZSBtZXRhZGF0YSBhbmQgZmluaXNoIHRhc2siLCJ0byI6IkRCIn1dLCJwYXJ0aWNpcGFudHMiOlt7ImFjdG9yIjp0cnVlLCJpZCI6Ik9wZXJhdG9yIiwibGFiZWwiOiJPcGVyYXRvciJ9LHsiYWN0b3IiOmZhbHNlLCJpZCI6IkFwcCIsImxhYmVsIjoiTmV4dC5qcyBjb21tYW5kIn0seyJhY3RvciI6ZmFsc2UsImlkIjoiREIiLCJsYWJlbCI6IlBvc3RncmVTUUwifSx7ImFjdG9yIjpmYWxzZSwiaWQiOiJXb3JrZXIiLCJsYWJlbCI6IlRhc2sgd29ya2VyIn0seyJhY3RvciI6ZmFsc2UsImlkIjoiRmlsZXMiLCJsYWJlbCI6IlByaXZhdGUgc3RvcmFnZSJ9XX0sImRlc2NyaXB0aW9uIjoiRmFpbHVyZSBiZWZvcmUgY29tbWl0IHJvbGxzIGJhY2sgdGhlIHRyYW5zYWN0aW9uLiBBIHJlcXVlc3QgcmV0cnkgcmV0dXJucyB0aGUgZXhpc3RpbmcgcmVzdWx0LiBBIGZpbGUtZ2VuZXJhdGlvbiBmYWlsdXJlIHJldHJpZXMgaW5kZXBlbmRlbnRseSBhbmQgY2Fubm90IGR1cGxpY2F0ZSB0aGUgcmVjZWlwdCBwb3N0aW5nLiIsImlkIjoicmVjb3JkX3BheW1lbnRfc2VxdWVuY2UiLCJraW5kIjoic2VxdWVuY2UiLCJzb3VyY2VTaGEyNTYiOiI3NDI3YzY2MzgzY2I1ZTVmNWM1YTVkN2Y0OTRiNmUxNDQ1NWExZTVhNDEyMmMwZTM3YThmNTkwZmZlN2M5ZDg0Iiwic3R5bGVzIjpbXSwidGl0bGUiOiJBdG9taWMgcGF5bWVudCBwb3N0aW5nIGFuZCBkb2N1bWVudCBnZW5lcmF0aW9uIiwidmVyc2lvbiI6MX0
+```
+
+## Customer invoices, allocations and jobs
+
+Allocation tables enable several payments per invoice and one payment across invoices. A unique originating invoice permits at most one job. Customer/entity/currency constraints are described in the schema document.
+
+<!-- mermaid:id=customer_money_er -->
+```mermaid
+erDiagram
+  INVOICES {
+    uuid id PK
+    uuid customer_id FK
+    char currency
+    bigint total_minor
+  }
+  PAYMENTS {
+    uuid id PK
+    uuid money_account_id FK
+    bigint amount_minor
+    char currency
+  }
+  CUSTOMER_PAYMENT_ALLOCATIONS {
+    uuid id PK
+    uuid invoice_id FK
+    uuid payment_id FK
+    bigint document_amount_minor
+    int effect
+  }
+  JOBS {
+    uuid id PK
+    uuid origin_invoice_id FK
+    string lifecycle
+  }
+  CUSTOMER_CREDIT_NOTES {
+    uuid id PK
+    uuid invoice_id FK
+    bigint total_minor
+  }
+  INVOICES ||--o{ CUSTOMER_PAYMENT_ALLOCATIONS : "receives"
+  PAYMENTS ||--o{ CUSTOMER_PAYMENT_ALLOCATIONS : "allocates"
+  INVOICES ||--o| JOBS : "originates"
+  INVOICES ||--o{ CUSTOMER_CREDIT_NOTES : "adjusted_by"
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImVudGl0aWVzIjpbeyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIGN1c3RvbWVyX2lkIEZLIiwiY2hhciBjdXJyZW5jeSIsImJpZ2ludCB0b3RhbF9taW5vciJdLCJpZCI6IklOVk9JQ0VTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIG1vbmV5X2FjY291bnRfaWQgRksiLCJiaWdpbnQgYW1vdW50X21pbm9yIiwiY2hhciBjdXJyZW5jeSJdLCJpZCI6IlBBWU1FTlRTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIGludm9pY2VfaWQgRksiLCJ1dWlkIHBheW1lbnRfaWQgRksiLCJiaWdpbnQgZG9jdW1lbnRfYW1vdW50X21pbm9yIiwiaW50IGVmZmVjdCJdLCJpZCI6IkNVU1RPTUVSX1BBWU1FTlRfQUxMT0NBVElPTlMifSx7ImF0dHJpYnV0ZXMiOlsidXVpZCBpZCBQSyIsInV1aWQgb3JpZ2luX2ludm9pY2VfaWQgRksiLCJzdHJpbmcgbGlmZWN5Y2xlIl0sImlkIjoiSk9CUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBpbnZvaWNlX2lkIEZLIiwiYmlnaW50IHRvdGFsX21pbm9yIl0sImlkIjoiQ1VTVE9NRVJfQ1JFRElUX05PVEVTIn1dLCJyZWxhdGlvbnNoaXBzIjpbeyJjYXJkaW5hbGl0eSI6Inx8LS1veyIsImZyb20iOiJJTlZPSUNFUyIsImxhYmVsIjoicmVjZWl2ZXMiLCJ0byI6IkNVU1RPTUVSX1BBWU1FTlRfQUxMT0NBVElPTlMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IlBBWU1FTlRTIiwibGFiZWwiOiJhbGxvY2F0ZXMiLCJ0byI6IkNVU1RPTUVSX1BBWU1FTlRfQUxMT0NBVElPTlMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW98IiwiZnJvbSI6IklOVk9JQ0VTIiwibGFiZWwiOiJvcmlnaW5hdGVzIiwidG8iOiJKT0JTIn0seyJjYXJkaW5hbGl0eSI6Inx8LS1veyIsImZyb20iOiJJTlZPSUNFUyIsImxhYmVsIjoiYWRqdXN0ZWRfYnkiLCJ0byI6IkNVU1RPTUVSX0NSRURJVF9OT1RFUyJ9XX0sImRlc2NyaXB0aW9uIjoiQWxsb2NhdGlvbiB0YWJsZXMgZW5hYmxlIHNldmVyYWwgcGF5bWVudHMgcGVyIGludm9pY2UgYW5kIG9uZSBwYXltZW50IGFjcm9zcyBpbnZvaWNlcy4gQSB1bmlxdWUgb3JpZ2luYXRpbmcgaW52b2ljZSBwZXJtaXRzIGF0IG1vc3Qgb25lIGpvYi4gQ3VzdG9tZXIvZW50aXR5L2N1cnJlbmN5IGNvbnN0cmFpbnRzIGFyZSBkZXNjcmliZWQgaW4gdGhlIHNjaGVtYSBkb2N1bWVudC4iLCJpZCI6ImN1c3RvbWVyX21vbmV5X2VyIiwia2luZCI6ImVyIiwic291cmNlU2hhMjU2IjoiODUyMmI1ZGRmYzgyNjI5ZjNjMjZhYzA5MTQ2MGE3MDEyYjczZmMzZGM3Y2Q4ZDY2ZTFkOWQ2ZWRkZmJlZTA5OCIsInN0eWxlcyI6W10sInRpdGxlIjoiQ3VzdG9tZXIgaW52b2ljZXMsIGFsbG9jYXRpb25zIGFuZCBqb2JzIiwidmVyc2lvbiI6MX0
+```
+
+## Jobs and quantity-based shipping
+
+Shipment items track partial deliveries. A single tracking number cannot represent the whole job once consignments split. Production item quantities are shown in the next diagram.
+
+<!-- mermaid:id=fulfilment_er -->
+```mermaid
+erDiagram
+  JOBS {
+    uuid id PK
+    uuid origin_invoice_id FK
+  }
+  JOB_ITEMS {
+    uuid id PK
+    uuid job_id FK
+    int ordered_quantity
+  }
+  SHIPMENTS {
+    uuid id PK
+    uuid job_id FK
+    string status
+  }
+  SHIPMENT_ITEMS {
+    uuid id PK
+    uuid shipment_id FK
+    uuid job_item_id FK
+    int shipped_quantity
+    int delivered_quantity
+  }
+  PRODUCTION_RUNS {
+    uuid id PK
+    uuid job_id FK
+    uuid vendor_id FK
+  }
+  JOBS ||--|{ JOB_ITEMS : "contains"
+  JOBS ||--o{ SHIPMENTS : "dispatches"
+  JOB_ITEMS ||--o{ SHIPMENT_ITEMS : "fulfilled_by"
+  SHIPMENTS ||--|{ SHIPMENT_ITEMS : "contains"
+  JOBS ||--o{ PRODUCTION_RUNS : "produced_in"
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImVudGl0aWVzIjpbeyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIG9yaWdpbl9pbnZvaWNlX2lkIEZLIl0sImlkIjoiSk9CUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBqb2JfaWQgRksiLCJpbnQgb3JkZXJlZF9xdWFudGl0eSJdLCJpZCI6IkpPQl9JVEVNUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBqb2JfaWQgRksiLCJzdHJpbmcgc3RhdHVzIl0sImlkIjoiU0hJUE1FTlRTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIHNoaXBtZW50X2lkIEZLIiwidXVpZCBqb2JfaXRlbV9pZCBGSyIsImludCBzaGlwcGVkX3F1YW50aXR5IiwiaW50IGRlbGl2ZXJlZF9xdWFudGl0eSJdLCJpZCI6IlNISVBNRU5UX0lURU1TIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIGpvYl9pZCBGSyIsInV1aWQgdmVuZG9yX2lkIEZLIl0sImlkIjoiUFJPRFVDVElPTl9SVU5TIn1dLCJyZWxhdGlvbnNoaXBzIjpbeyJjYXJkaW5hbGl0eSI6Inx8LS18eyIsImZyb20iOiJKT0JTIiwibGFiZWwiOiJjb250YWlucyIsInRvIjoiSk9CX0lURU1TIn0seyJjYXJkaW5hbGl0eSI6Inx8LS1veyIsImZyb20iOiJKT0JTIiwibGFiZWwiOiJkaXNwYXRjaGVzIiwidG8iOiJTSElQTUVOVFMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IkpPQl9JVEVNUyIsImxhYmVsIjoiZnVsZmlsbGVkX2J5IiwidG8iOiJTSElQTUVOVF9JVEVNUyJ9LHsiY2FyZGluYWxpdHkiOiJ8fC0tfHsiLCJmcm9tIjoiU0hJUE1FTlRTIiwibGFiZWwiOiJjb250YWlucyIsInRvIjoiU0hJUE1FTlRfSVRFTVMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IkpPQlMiLCJsYWJlbCI6InByb2R1Y2VkX2luIiwidG8iOiJQUk9EVUNUSU9OX1JVTlMifV19LCJkZXNjcmlwdGlvbiI6IlNoaXBtZW50IGl0ZW1zIHRyYWNrIHBhcnRpYWwgZGVsaXZlcmllcy4gQSBzaW5nbGUgdHJhY2tpbmcgbnVtYmVyIGNhbm5vdCByZXByZXNlbnQgdGhlIHdob2xlIGpvYiBvbmNlIGNvbnNpZ25tZW50cyBzcGxpdC4gUHJvZHVjdGlvbiBpdGVtIHF1YW50aXRpZXMgYXJlIHNob3duIGluIHRoZSBuZXh0IGRpYWdyYW0uIiwiaWQiOiJmdWxmaWxtZW50X2VyIiwia2luZCI6ImVyIiwic291cmNlU2hhMjU2IjoiZjM4MDUxMDA4NjE3NDZkYmUzMTFiZWEzYTU2ODhkZWEzMGY4ZDZlNjQwYTM2N2VkMzBjZjMyMmU3M2EyOTg3NSIsInN0eWxlcyI6W10sInRpdGxlIjoiSm9icyBhbmQgcXVhbnRpdHktYmFzZWQgc2hpcHBpbmciLCJ2ZXJzaW9uIjoxfQ
+```
+
+## Production runs and item quantities
+
+Every run item must belong to the same job as its run. V1 assigns a run to one job; a supplier may work on many runs.
+
+<!-- mermaid:id=production_er -->
+```mermaid
+erDiagram
+  JOBS {
+    uuid id PK
+  }
+  JOB_ITEMS {
+    uuid id PK
+    uuid job_id FK
+    int ordered_quantity
+  }
+  PRODUCTION_RUNS {
+    uuid id PK
+    uuid job_id FK
+    uuid vendor_id FK
+    string status
+  }
+  PRODUCTION_RUN_ITEMS {
+    uuid id PK
+    uuid production_run_id FK
+    uuid job_item_id FK
+    int completed_quantity
+  }
+  VENDORS {
+    uuid id PK
+    string name
+  }
+  JOBS ||--|{ JOB_ITEMS : "contains"
+  JOBS ||--o{ PRODUCTION_RUNS : "has"
+  VENDORS ||--o{ PRODUCTION_RUNS : "supplies"
+  PRODUCTION_RUNS ||--|{ PRODUCTION_RUN_ITEMS : "contains"
+  JOB_ITEMS ||--o{ PRODUCTION_RUN_ITEMS : "produced_as"
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImVudGl0aWVzIjpbeyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiXSwiaWQiOiJKT0JTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIGpvYl9pZCBGSyIsImludCBvcmRlcmVkX3F1YW50aXR5Il0sImlkIjoiSk9CX0lURU1TIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIGpvYl9pZCBGSyIsInV1aWQgdmVuZG9yX2lkIEZLIiwic3RyaW5nIHN0YXR1cyJdLCJpZCI6IlBST0RVQ1RJT05fUlVOUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBwcm9kdWN0aW9uX3J1bl9pZCBGSyIsInV1aWQgam9iX2l0ZW1faWQgRksiLCJpbnQgY29tcGxldGVkX3F1YW50aXR5Il0sImlkIjoiUFJPRFVDVElPTl9SVU5fSVRFTVMifSx7ImF0dHJpYnV0ZXMiOlsidXVpZCBpZCBQSyIsInN0cmluZyBuYW1lIl0sImlkIjoiVkVORE9SUyJ9XSwicmVsYXRpb25zaGlwcyI6W3siY2FyZGluYWxpdHkiOiJ8fC0tfHsiLCJmcm9tIjoiSk9CUyIsImxhYmVsIjoiY29udGFpbnMiLCJ0byI6IkpPQl9JVEVNUyJ9LHsiY2FyZGluYWxpdHkiOiJ8fC0tb3siLCJmcm9tIjoiSk9CUyIsImxhYmVsIjoiaGFzIiwidG8iOiJQUk9EVUNUSU9OX1JVTlMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IlZFTkRPUlMiLCJsYWJlbCI6InN1cHBsaWVzIiwidG8iOiJQUk9EVUNUSU9OX1JVTlMifSx7ImNhcmRpbmFsaXR5IjoifHwtLXx7IiwiZnJvbSI6IlBST0RVQ1RJT05fUlVOUyIsImxhYmVsIjoiY29udGFpbnMiLCJ0byI6IlBST0RVQ1RJT05fUlVOX0lURU1TIn0seyJjYXJkaW5hbGl0eSI6Inx8LS1veyIsImZyb20iOiJKT0JfSVRFTVMiLCJsYWJlbCI6InByb2R1Y2VkX2FzIiwidG8iOiJQUk9EVUNUSU9OX1JVTl9JVEVNUyJ9XX0sImRlc2NyaXB0aW9uIjoiRXZlcnkgcnVuIGl0ZW0gbXVzdCBiZWxvbmcgdG8gdGhlIHNhbWUgam9iIGFzIGl0cyBydW4uIFYxIGFzc2lnbnMgYSBydW4gdG8gb25lIGpvYjsgYSBzdXBwbGllciBtYXkgd29yayBvbiBtYW55IHJ1bnMuIiwiaWQiOiJwcm9kdWN0aW9uX2VyIiwia2luZCI6ImVyIiwic291cmNlU2hhMjU2IjoiYmYwZDQ0ZmE0YTgyZmZjZDhmY2NjMjY3YTRiNmYyZjEzY2VkYjRjYTU3NjkxMmY3MGIwZDBmODFiOWEwOTI1YSIsInN0eWxlcyI6W10sInRpdGxlIjoiUHJvZHVjdGlvbiBydW5zIGFuZCBpdGVtIHF1YW50aXRpZXMiLCJ2ZXJzaW9uIjoxfQ
+```
+
+## Supplier bills, job cost and settlement
+
+Bill lines can be linked to a job or classified as overhead. One bill may cover several jobs using separate lines. A bill can exist unpaid, and an unallocated payment can be a vendor advance.
+
+<!-- mermaid:id=vendor_money_er -->
+```mermaid
+erDiagram
+  VENDOR_BILLS {
+    uuid id PK
+    uuid vendor_id FK
+    char currency
+    bigint total_minor
+  }
+  VENDOR_BILL_LINES {
+    uuid id PK
+    uuid vendor_bill_id FK
+    uuid job_id FK
+    bigint net_minor
+  }
+  JOBS {
+    uuid id PK
+  }
+  PAYMENTS {
+    uuid id PK
+    uuid money_account_id FK
+    bigint amount_minor
+  }
+  VENDOR_PAYMENT_ALLOCATIONS {
+    uuid id PK
+    uuid payment_id FK
+    uuid vendor_bill_id FK
+    bigint document_amount_minor
+    int effect
+  }
+  VENDOR_BILLS ||--|{ VENDOR_BILL_LINES : "contains"
+  JOBS o|--o{ VENDOR_BILL_LINES : "costed_by"
+  VENDOR_BILLS ||--o{ VENDOR_PAYMENT_ALLOCATIONS : "settled_by"
+  PAYMENTS ||--o{ VENDOR_PAYMENT_ALLOCATIONS : "allocates"
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImVudGl0aWVzIjpbeyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIHZlbmRvcl9pZCBGSyIsImNoYXIgY3VycmVuY3kiLCJiaWdpbnQgdG90YWxfbWlub3IiXSwiaWQiOiJWRU5ET1JfQklMTFMifSx7ImF0dHJpYnV0ZXMiOlsidXVpZCBpZCBQSyIsInV1aWQgdmVuZG9yX2JpbGxfaWQgRksiLCJ1dWlkIGpvYl9pZCBGSyIsImJpZ2ludCBuZXRfbWlub3IiXSwiaWQiOiJWRU5ET1JfQklMTF9MSU5FUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIl0sImlkIjoiSk9CUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBtb25leV9hY2NvdW50X2lkIEZLIiwiYmlnaW50IGFtb3VudF9taW5vciJdLCJpZCI6IlBBWU1FTlRTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIHBheW1lbnRfaWQgRksiLCJ1dWlkIHZlbmRvcl9iaWxsX2lkIEZLIiwiYmlnaW50IGRvY3VtZW50X2Ftb3VudF9taW5vciIsImludCBlZmZlY3QiXSwiaWQiOiJWRU5ET1JfUEFZTUVOVF9BTExPQ0FUSU9OUyJ9XSwicmVsYXRpb25zaGlwcyI6W3siY2FyZGluYWxpdHkiOiJ8fC0tfHsiLCJmcm9tIjoiVkVORE9SX0JJTExTIiwibGFiZWwiOiJjb250YWlucyIsInRvIjoiVkVORE9SX0JJTExfTElORVMifSx7ImNhcmRpbmFsaXR5Ijoib3wtLW97IiwiZnJvbSI6IkpPQlMiLCJsYWJlbCI6ImNvc3RlZF9ieSIsInRvIjoiVkVORE9SX0JJTExfTElORVMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IlZFTkRPUl9CSUxMUyIsImxhYmVsIjoic2V0dGxlZF9ieSIsInRvIjoiVkVORE9SX1BBWU1FTlRfQUxMT0NBVElPTlMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IlBBWU1FTlRTIiwibGFiZWwiOiJhbGxvY2F0ZXMiLCJ0byI6IlZFTkRPUl9QQVlNRU5UX0FMTE9DQVRJT05TIn1dfSwiZGVzY3JpcHRpb24iOiJCaWxsIGxpbmVzIGNhbiBiZSBsaW5rZWQgdG8gYSBqb2Igb3IgY2xhc3NpZmllZCBhcyBvdmVyaGVhZC4gT25lIGJpbGwgbWF5IGNvdmVyIHNldmVyYWwgam9icyB1c2luZyBzZXBhcmF0ZSBsaW5lcy4gQSBiaWxsIGNhbiBleGlzdCB1bnBhaWQsIGFuZCBhbiB1bmFsbG9jYXRlZCBwYXltZW50IGNhbiBiZSBhIHZlbmRvciBhZHZhbmNlLiIsImlkIjoidmVuZG9yX21vbmV5X2VyIiwia2luZCI6ImVyIiwic291cmNlU2hhMjU2IjoiNzNmOTQ5MjU2MzVhYTgwMzVjZDQ2YjFhODAxYTUxYjdhYjgxMmIyMDg3MzAyMTE5ZGZjOTkwNmEwNmNjYTM5MSIsInN0eWxlcyI6W10sInRpdGxlIjoiU3VwcGxpZXIgYmlsbHMsIGpvYiBjb3N0IGFuZCBzZXR0bGVtZW50IiwidmVyc2lvbiI6MX0
+```
+
+## One ledger supporting all financial views
+
+Posted entries balance in the entity functional currency. Customer/vendor/job/partner dimensions are on journal lines but omitted here for readability. Money-account balances are derived from cash ledger lines.
+
+<!-- mermaid:id=ledger_er -->
+```mermaid
+erDiagram
+  LEGAL_ENTITIES {
+    uuid id PK
+    char functional_currency
+  }
+  JOURNAL_ENTRIES {
+    uuid id PK
+    uuid legal_entity_id FK
+    date accounting_date
+    string posting_key
+  }
+  JOURNAL_LINES {
+    uuid id PK
+    uuid journal_entry_id FK
+    uuid gl_account_id FK
+    bigint debit_base_minor
+    bigint credit_base_minor
+  }
+  GL_ACCOUNTS {
+    uuid id PK
+    uuid legal_entity_id FK
+    string account_type
+  }
+  MONEY_ACCOUNTS {
+    uuid id PK
+    uuid gl_account_id FK
+    char currency
+  }
+  LEGAL_ENTITIES ||--o{ JOURNAL_ENTRIES : "owns"
+  LEGAL_ENTITIES ||--|{ GL_ACCOUNTS : "classifies"
+  JOURNAL_ENTRIES ||--|{ JOURNAL_LINES : "balances"
+  GL_ACCOUNTS ||--o{ JOURNAL_LINES : "receives"
+  GL_ACCOUNTS ||--o| MONEY_ACCOUNTS : "backs"
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImVudGl0aWVzIjpbeyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJjaGFyIGZ1bmN0aW9uYWxfY3VycmVuY3kiXSwiaWQiOiJMRUdBTF9FTlRJVElFUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBsZWdhbF9lbnRpdHlfaWQgRksiLCJkYXRlIGFjY291bnRpbmdfZGF0ZSIsInN0cmluZyBwb3N0aW5nX2tleSJdLCJpZCI6IkpPVVJOQUxfRU5UUklFUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBqb3VybmFsX2VudHJ5X2lkIEZLIiwidXVpZCBnbF9hY2NvdW50X2lkIEZLIiwiYmlnaW50IGRlYml0X2Jhc2VfbWlub3IiLCJiaWdpbnQgY3JlZGl0X2Jhc2VfbWlub3IiXSwiaWQiOiJKT1VSTkFMX0xJTkVTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJ1dWlkIGxlZ2FsX2VudGl0eV9pZCBGSyIsInN0cmluZyBhY2NvdW50X3R5cGUiXSwiaWQiOiJHTF9BQ0NPVU5UUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwidXVpZCBnbF9hY2NvdW50X2lkIEZLIiwiY2hhciBjdXJyZW5jeSJdLCJpZCI6Ik1PTkVZX0FDQ09VTlRTIn1dLCJyZWxhdGlvbnNoaXBzIjpbeyJjYXJkaW5hbGl0eSI6Inx8LS1veyIsImZyb20iOiJMRUdBTF9FTlRJVElFUyIsImxhYmVsIjoib3ducyIsInRvIjoiSk9VUk5BTF9FTlRSSUVTIn0seyJjYXJkaW5hbGl0eSI6Inx8LS18eyIsImZyb20iOiJMRUdBTF9FTlRJVElFUyIsImxhYmVsIjoiY2xhc3NpZmllcyIsInRvIjoiR0xfQUNDT1VOVFMifSx7ImNhcmRpbmFsaXR5IjoifHwtLXx7IiwiZnJvbSI6IkpPVVJOQUxfRU5UUklFUyIsImxhYmVsIjoiYmFsYW5jZXMiLCJ0byI6IkpPVVJOQUxfTElORVMifSx7ImNhcmRpbmFsaXR5IjoifHwtLW97IiwiZnJvbSI6IkdMX0FDQ09VTlRTIiwibGFiZWwiOiJyZWNlaXZlcyIsInRvIjoiSk9VUk5BTF9MSU5FUyJ9LHsiY2FyZGluYWxpdHkiOiJ8fC0tb3wiLCJmcm9tIjoiR0xfQUNDT1VOVFMiLCJsYWJlbCI6ImJhY2tzIiwidG8iOiJNT05FWV9BQ0NPVU5UUyJ9XX0sImRlc2NyaXB0aW9uIjoiUG9zdGVkIGVudHJpZXMgYmFsYW5jZSBpbiB0aGUgZW50aXR5IGZ1bmN0aW9uYWwgY3VycmVuY3kuIEN1c3RvbWVyL3ZlbmRvci9qb2IvcGFydG5lciBkaW1lbnNpb25zIGFyZSBvbiBqb3VybmFsIGxpbmVzIGJ1dCBvbWl0dGVkIGhlcmUgZm9yIHJlYWRhYmlsaXR5LiBNb25leS1hY2NvdW50IGJhbGFuY2VzIGFyZSBkZXJpdmVkIGZyb20gY2FzaCBsZWRnZXIgbGluZXMuIiwiaWQiOiJsZWRnZXJfZXIiLCJraW5kIjoiZXIiLCJzb3VyY2VTaGEyNTYiOiI2NjBkMTU0MTliYzAwMjkxMWI3ODhjOGUyYWVlOTZjYzFiYTJkNjg3NDc4YTVlYTIxMWY4YTE1N2U2MzdhMTg4Iiwic3R5bGVzIjpbXSwidGl0bGUiOiJPbmUgbGVkZ2VyIHN1cHBvcnRpbmcgYWxsIGZpbmFuY2lhbCB2aWV3cyIsInZlcnNpb24iOjF9
+```
+
+## Partner positions and movements
+
+Partner events may be non-cash, such as a profit allocation. A cash event and its payment reference the same journal rather than posting twice. Capital, loans and current balances stay separate.
+
+<!-- mermaid:id=partner_er -->
+```mermaid
+erDiagram
+  PARTNERS {
+    uuid id PK
+    string display_name
+  }
+  PARTNER_ACCOUNTS {
+    uuid id PK
+    uuid partner_id FK
+    uuid legal_entity_id FK
+    string bucket
+  }
+  PARTNER_EVENTS {
+    uuid id PK
+    uuid partner_account_id FK
+    uuid payment_id FK
+    uuid journal_entry_id FK
+    string kind
+  }
+  PAYMENTS {
+    uuid id PK
+    bigint amount_minor
+  }
+  JOURNAL_ENTRIES {
+    uuid id PK
+    date accounting_date
+  }
+  PARTNERS ||--o{ PARTNER_ACCOUNTS : "holds"
+  PARTNER_ACCOUNTS ||--o{ PARTNER_EVENTS : "records"
+  PAYMENTS o|--o{ PARTNER_EVENTS : "funds"
+  JOURNAL_ENTRIES ||--o{ PARTNER_EVENTS : "posts"
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImVudGl0aWVzIjpbeyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJzdHJpbmcgZGlzcGxheV9uYW1lIl0sImlkIjoiUEFSVE5FUlMifSx7ImF0dHJpYnV0ZXMiOlsidXVpZCBpZCBQSyIsInV1aWQgcGFydG5lcl9pZCBGSyIsInV1aWQgbGVnYWxfZW50aXR5X2lkIEZLIiwic3RyaW5nIGJ1Y2tldCJdLCJpZCI6IlBBUlRORVJfQUNDT1VOVFMifSx7ImF0dHJpYnV0ZXMiOlsidXVpZCBpZCBQSyIsInV1aWQgcGFydG5lcl9hY2NvdW50X2lkIEZLIiwidXVpZCBwYXltZW50X2lkIEZLIiwidXVpZCBqb3VybmFsX2VudHJ5X2lkIEZLIiwic3RyaW5nIGtpbmQiXSwiaWQiOiJQQVJUTkVSX0VWRU5UUyJ9LHsiYXR0cmlidXRlcyI6WyJ1dWlkIGlkIFBLIiwiYmlnaW50IGFtb3VudF9taW5vciJdLCJpZCI6IlBBWU1FTlRTIn0seyJhdHRyaWJ1dGVzIjpbInV1aWQgaWQgUEsiLCJkYXRlIGFjY291bnRpbmdfZGF0ZSJdLCJpZCI6IkpPVVJOQUxfRU5UUklFUyJ9XSwicmVsYXRpb25zaGlwcyI6W3siY2FyZGluYWxpdHkiOiJ8fC0tb3siLCJmcm9tIjoiUEFSVE5FUlMiLCJsYWJlbCI6ImhvbGRzIiwidG8iOiJQQVJUTkVSX0FDQ09VTlRTIn0seyJjYXJkaW5hbGl0eSI6Inx8LS1veyIsImZyb20iOiJQQVJUTkVSX0FDQ09VTlRTIiwibGFiZWwiOiJyZWNvcmRzIiwidG8iOiJQQVJUTkVSX0VWRU5UUyJ9LHsiY2FyZGluYWxpdHkiOiJvfC0tb3siLCJmcm9tIjoiUEFZTUVOVFMiLCJsYWJlbCI6ImZ1bmRzIiwidG8iOiJQQVJUTkVSX0VWRU5UUyJ9LHsiY2FyZGluYWxpdHkiOiJ8fC0tb3siLCJmcm9tIjoiSk9VUk5BTF9FTlRSSUVTIiwibGFiZWwiOiJwb3N0cyIsInRvIjoiUEFSVE5FUl9FVkVOVFMifV19LCJkZXNjcmlwdGlvbiI6IlBhcnRuZXIgZXZlbnRzIG1heSBiZSBub24tY2FzaCwgc3VjaCBhcyBhIHByb2ZpdCBhbGxvY2F0aW9uLiBBIGNhc2ggZXZlbnQgYW5kIGl0cyBwYXltZW50IHJlZmVyZW5jZSB0aGUgc2FtZSBqb3VybmFsIHJhdGhlciB0aGFuIHBvc3RpbmcgdHdpY2UuIENhcGl0YWwsIGxvYW5zIGFuZCBjdXJyZW50IGJhbGFuY2VzIHN0YXkgc2VwYXJhdGUuIiwiaWQiOiJwYXJ0bmVyX2VyIiwia2luZCI6ImVyIiwic291cmNlU2hhMjU2IjoiOWYzZjlhOWYyOWQ4YTMwMGUxY2RlNDNmMTFmNmFlOWVlYzExNDhkNTA2ZTEwMzk3NzZiNjc0YmNlM2FlOGUxNiIsInN0eWxlcyI6W10sInRpdGxlIjoiUGFydG5lciBwb3NpdGlvbnMgYW5kIG1vdmVtZW50cyIsInZlcnNpb24iOjF9
+```
+
+## Cash movement and profit are different views
+
+Conceptual financial effects; the enforceable-invoice branch can establish the advance liability before receipt. Supplier payment settles an obligation; it does not duplicate previously recognised cost.
+
+<!-- mermaid:id=cash_and_profit -->
+```mermaid
+flowchart TB
+  Receipt["Customer prepayment"]
+  Cash["Cash or processor balance"]
+  Advance["Customer advance liability"]
+  Control["Transfer of control under policy"]
+  Revenue["Recognised revenue"]
+  Cost["Recognised costs and expenses"]
+  Profit["Period profit or loss"]
+  Supplier["Pay supplier liability"]
+  Bill["Supplier bill or accrual"]
+  Transfer["Transfer between own accounts"]
+  Receipt -->|Increases| Cash
+  Receipt -->|Until earned| Advance
+  Advance -->|Release when earned| Control
+  Control -->|Recognise| Revenue
+  Revenue -->|Adds| Profit
+  Cost -->|Subtracts| Profit
+  Supplier -->|Reduces| Cash
+  Transfer -->|Changes location| Cash
+  Bill -->|Recognise under policy| Cost
+  Bill -->|Settle obligation| Supplier
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImRpcmVjdGlvbiI6IlRCIiwiZWRnZXMiOlt7ImZyb20iOiJSZWNlaXB0IiwibGFiZWwiOiJJbmNyZWFzZXMiLCJ0byI6IkNhc2gifSx7ImZyb20iOiJSZWNlaXB0IiwibGFiZWwiOiJVbnRpbCBlYXJuZWQiLCJ0byI6IkFkdmFuY2UifSx7ImZyb20iOiJBZHZhbmNlIiwibGFiZWwiOiJSZWxlYXNlIHdoZW4gZWFybmVkIiwidG8iOiJDb250cm9sIn0seyJmcm9tIjoiQ29udHJvbCIsImxhYmVsIjoiUmVjb2duaXNlIiwidG8iOiJSZXZlbnVlIn0seyJmcm9tIjoiUmV2ZW51ZSIsImxhYmVsIjoiQWRkcyIsInRvIjoiUHJvZml0In0seyJmcm9tIjoiQ29zdCIsImxhYmVsIjoiU3VidHJhY3RzIiwidG8iOiJQcm9maXQifSx7ImZyb20iOiJTdXBwbGllciIsImxhYmVsIjoiUmVkdWNlcyIsInRvIjoiQ2FzaCJ9LHsiZnJvbSI6IlRyYW5zZmVyIiwibGFiZWwiOiJDaGFuZ2VzIGxvY2F0aW9uIiwidG8iOiJDYXNoIn0seyJmcm9tIjoiQmlsbCIsImxhYmVsIjoiUmVjb2duaXNlIHVuZGVyIHBvbGljeSIsInRvIjoiQ29zdCJ9LHsiZnJvbSI6IkJpbGwiLCJsYWJlbCI6IlNldHRsZSBvYmxpZ2F0aW9uIiwidG8iOiJTdXBwbGllciJ9XSwibm9kZXMiOlt7ImlkIjoiUmVjZWlwdCIsImxhYmVsIjoiQ3VzdG9tZXIgcHJlcGF5bWVudCJ9LHsiaWQiOiJDYXNoIiwibGFiZWwiOiJDYXNoIG9yIHByb2Nlc3NvciBiYWxhbmNlIn0seyJpZCI6IkFkdmFuY2UiLCJsYWJlbCI6IkN1c3RvbWVyIGFkdmFuY2UgbGlhYmlsaXR5In0seyJpZCI6IkNvbnRyb2wiLCJsYWJlbCI6IlRyYW5zZmVyIG9mIGNvbnRyb2wgdW5kZXIgcG9saWN5In0seyJpZCI6IlJldmVudWUiLCJsYWJlbCI6IlJlY29nbmlzZWQgcmV2ZW51ZSJ9LHsiaWQiOiJDb3N0IiwibGFiZWwiOiJSZWNvZ25pc2VkIGNvc3RzIGFuZCBleHBlbnNlcyJ9LHsiaWQiOiJQcm9maXQiLCJsYWJlbCI6IlBlcmlvZCBwcm9maXQgb3IgbG9zcyJ9LHsiaWQiOiJTdXBwbGllciIsImxhYmVsIjoiUGF5IHN1cHBsaWVyIGxpYWJpbGl0eSJ9LHsiaWQiOiJCaWxsIiwibGFiZWwiOiJTdXBwbGllciBiaWxsIG9yIGFjY3J1YWwifSx7ImlkIjoiVHJhbnNmZXIiLCJsYWJlbCI6IlRyYW5zZmVyIGJldHdlZW4gb3duIGFjY291bnRzIn1dfSwiZGVzY3JpcHRpb24iOiJDb25jZXB0dWFsIGZpbmFuY2lhbCBlZmZlY3RzOyB0aGUgZW5mb3JjZWFibGUtaW52b2ljZSBicmFuY2ggY2FuIGVzdGFibGlzaCB0aGUgYWR2YW5jZSBsaWFiaWxpdHkgYmVmb3JlIHJlY2VpcHQuIFN1cHBsaWVyIHBheW1lbnQgc2V0dGxlcyBhbiBvYmxpZ2F0aW9uOyBpdCBkb2VzIG5vdCBkdXBsaWNhdGUgcHJldmlvdXNseSByZWNvZ25pc2VkIGNvc3QuIiwiaWQiOiJjYXNoX2FuZF9wcm9maXQiLCJraW5kIjoiZmxvd2NoYXJ0Iiwic291cmNlU2hhMjU2IjoiZTQ2MzNlNjgwYjc3Njc3OTljZTA5YTFmNjBiOWM4MmFlZDZmMzU5YzMwYzI2MjE3ZGI5NzkwM2JlNGEzNTkwYiIsInN0eWxlcyI6W10sInRpdGxlIjoiQ2FzaCBtb3ZlbWVudCBhbmQgcHJvZml0IGFyZSBkaWZmZXJlbnQgdmlld3MiLCJ2ZXJzaW9uIjoxfQ
+```
+
+## Build dependencies and release gates
+
+This is a dependency map, not a calendar estimate. The pilot launches before the app can claim complete business P&L coverage.
+
+<!-- mermaid:id=build_dependencies -->
+```mermaid
+flowchart TB
+  Decisions["Entity and accounting decisions"]
+  Foundation["Auth and posting foundation"]
+  Pilot["Invoice to paid job pilot"]
+  Operations["Production and shipping"]
+  Costs["Bills and expenses"]
+  Reports["Recognition and reports"]
+  Cash["Opening balances and reconciliation"]
+  Partners["Partner accounts"]
+  Release["Complete basic release"]
+  Automation["Integrations and automation"]
+  Decisions --> Foundation
+  Foundation --> Pilot
+  Pilot --> Operations
+  Pilot --> Costs
+  Costs --> Reports
+  Operations --> Reports
+  Costs --> Cash
+  Cash --> Partners
+  Reports --> Release
+  Cash --> Release
+  Partners --> Release
+  Release -->|As needed| Automation
+%% portable-canonical-v2:eyJhY2Nlc3NpYmlsaXR5IjpudWxsLCJkYXRhIjp7ImRpcmVjdGlvbiI6IlRCIiwiZWRnZXMiOlt7ImZyb20iOiJEZWNpc2lvbnMiLCJ0byI6IkZvdW5kYXRpb24ifSx7ImZyb20iOiJGb3VuZGF0aW9uIiwidG8iOiJQaWxvdCJ9LHsiZnJvbSI6IlBpbG90IiwidG8iOiJPcGVyYXRpb25zIn0seyJmcm9tIjoiUGlsb3QiLCJ0byI6IkNvc3RzIn0seyJmcm9tIjoiQ29zdHMiLCJ0byI6IlJlcG9ydHMifSx7ImZyb20iOiJPcGVyYXRpb25zIiwidG8iOiJSZXBvcnRzIn0seyJmcm9tIjoiQ29zdHMiLCJ0byI6IkNhc2gifSx7ImZyb20iOiJDYXNoIiwidG8iOiJQYXJ0bmVycyJ9LHsiZnJvbSI6IlJlcG9ydHMiLCJ0byI6IlJlbGVhc2UifSx7ImZyb20iOiJDYXNoIiwidG8iOiJSZWxlYXNlIn0seyJmcm9tIjoiUGFydG5lcnMiLCJ0byI6IlJlbGVhc2UifSx7ImZyb20iOiJSZWxlYXNlIiwibGFiZWwiOiJBcyBuZWVkZWQiLCJ0byI6IkF1dG9tYXRpb24ifV0sIm5vZGVzIjpbeyJpZCI6IkRlY2lzaW9ucyIsImxhYmVsIjoiRW50aXR5IGFuZCBhY2NvdW50aW5nIGRlY2lzaW9ucyJ9LHsiaWQiOiJGb3VuZGF0aW9uIiwibGFiZWwiOiJBdXRoIGFuZCBwb3N0aW5nIGZvdW5kYXRpb24ifSx7ImlkIjoiUGlsb3QiLCJsYWJlbCI6Ikludm9pY2UgdG8gcGFpZCBqb2IgcGlsb3QifSx7ImlkIjoiT3BlcmF0aW9ucyIsImxhYmVsIjoiUHJvZHVjdGlvbiBhbmQgc2hpcHBpbmcifSx7ImlkIjoiQ29zdHMiLCJsYWJlbCI6IkJpbGxzIGFuZCBleHBlbnNlcyJ9LHsiaWQiOiJSZXBvcnRzIiwibGFiZWwiOiJSZWNvZ25pdGlvbiBhbmQgcmVwb3J0cyJ9LHsiaWQiOiJDYXNoIiwibGFiZWwiOiJPcGVuaW5nIGJhbGFuY2VzIGFuZCByZWNvbmNpbGlhdGlvbiJ9LHsiaWQiOiJQYXJ0bmVycyIsImxhYmVsIjoiUGFydG5lciBhY2NvdW50cyJ9LHsiaWQiOiJSZWxlYXNlIiwibGFiZWwiOiJDb21wbGV0ZSBiYXNpYyByZWxlYXNlIn0seyJpZCI6IkF1dG9tYXRpb24iLCJsYWJlbCI6IkludGVncmF0aW9ucyBhbmQgYXV0b21hdGlvbiJ9XX0sImRlc2NyaXB0aW9uIjoiVGhpcyBpcyBhIGRlcGVuZGVuY3kgbWFwLCBub3QgYSBjYWxlbmRhciBlc3RpbWF0ZS4gVGhlIHBpbG90IGxhdW5jaGVzIGJlZm9yZSB0aGUgYXBwIGNhbiBjbGFpbSBjb21wbGV0ZSBidXNpbmVzcyBQJkwgY292ZXJhZ2UuIiwiaWQiOiJidWlsZF9kZXBlbmRlbmNpZXMiLCJraW5kIjoiZmxvd2NoYXJ0Iiwic291cmNlU2hhMjU2IjoiYTllZDBlMDVhNjJhZTY2ZWM4MjVlODUyYjFiZjY0YjViMjc3MjhlNmM5YzA1MGEwNDgzMGIxNzNhYWExZDQ3NCIsInN0eWxlcyI6W10sInRpdGxlIjoiQnVpbGQgZGVwZW5kZW5jaWVzIGFuZCByZWxlYXNlIGdhdGVzIiwidmVyc2lvbiI6MX0
+```
